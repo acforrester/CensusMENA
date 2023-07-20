@@ -1,0 +1,39 @@
+---
+output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+  )
+```
+
+# ReadMe
+
+Replication archive for "Middle Eastern and North Africans in U.S. Government Surveys: A Preview of MENA Demographics"
+
+## Usage
+
+### Workspace
+
+```{r workspace}
+sessionInfo()
+```
+
+### Scripts
+
+- [000-libraries.R](code/000-libraries.R)
+  - Load/install all packages and set some options
+- [001-data-prep.R](code/001-data-prep.R)
+  - Load the data, clean it, and setup databases
+- [002-demographic.R](code/002-demographic.R)
+  - Tabulate the selected demographic variables
+- [003-economic.R](code/003-economic.R)
+  - Tabulate the selected economic variables
+- [004-export-data.R](code/004-export-data.R)
+  - Combine the tabular data and prep them for export
+  
+
+
