@@ -7,7 +7,7 @@ This is a replication archive for my 2023 Cato Institute Briefing paper ["Middle
 
 I subsequently wrote two blog posts on [*Cato at Liberty*](https://www.cato.org/blog)
 - An [introductory piece](https://www.cato.org/blog/there-were-38-million-middle-eastern-or-north-africans-united-states-2021)
-- Some [confirmation from U.S. Census Bureau analysis](https://www.cato.org/blog/census-bureau-analysis-supports-catos-mena-analysis-0)
+- Some [confirmation from U.S. Census Bureau analysis](https://www.cato.org/blog/census-bureau-analysis-supports-catos-mena-analysis-0) ([codes](blog-post-census.Rmd))
 
 ## Usage
 
