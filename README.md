@@ -1,8 +1,13 @@
 
 # ReadMe
 
-Replication archive for “Middle Eastern and North Africans in U.S.
-Government Surveys: A Preview of MENA Demographics”
+This is a replication archive for my 2023 Cato Institute Briefing paper ["Middle Eastern or North African in U.S. Government Surveys: A Preview of MENA Demographics."](https://www.cato.org/briefing-paper/middle-eastern-or-north-african-us-government-surveys-preview-mena-demographics)
+
+> Forrester, A.C. 2023. Middle Eastern or North African in U.S. Government Surveys: A Preview of MENA Demographics. *Briefing Paper No. 166*. Washington, DC: Cato Institute.
+
+I subsequently wrote two blog posts on [*Cato at Liberty*](https://www.cato.org/blog)
+- An [introductory piece](https://www.cato.org/blog/there-were-38-million-middle-eastern-or-north-africans-united-states-2021)
+- Some [confirmation from U.S. Census Bureau analysis](https://www.cato.org/blog/census-bureau-analysis-supports-catos-mena-analysis-0)
 
 ## Usage
 
