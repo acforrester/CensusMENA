@@ -1,0 +1,242 @@
+---
+title: "Census Bureau Analysis Supports Cato MENA Analysis"
+author: "Andrew C. Forrester"
+subtitle: Data from the 2020 enumeration show a MENA population of 3.5 million
+output:
+  word_document: 
+    reference_docx: "word-template.docx"
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE,
+                      fig.width = 6,
+                      fig.height = 8,
+                      out.width = '40%',
+                      fig.align = "center")
+# Packages to load
+pkgs <- c("tidyverse",
+          "tidycensus") # Note, need 1.5 for the DHC-A
+
+# Load packages
+pacman::p_load(pkgs, character.only = TRUE) ; rm(pkgs)
+
+```
+
+Since publishing [Cato research](https://www.cato.org/briefing-paper/middle-eastern-or-north-african-us-government-surveys-preview-mena-demographics) that estimates the Middle Eastern or North African (MENA) population is around 3.8 million in 2021, the U.S. Census Bureau found [similar results](https://www.census.gov/library/stories/2023/09/2020-census-dhc-a-mena-population.html) from the 2020 enumeration and counted 3.5 million people who identified as MENA. These numbers come from detailed responses to the 2020 Census race question, which allowed respondents to write-in [additional detail](https://www.census.gov/newsroom/press-kits/2017/nct.html) about their background in addition to their race. The race question followed the standard definitions from the 1997 [Statistical Policy Directive (SPD) 15](https://www.govinfo.gov/content/pkg/FR-1997-10-30/pdf/97-28653.pdf), providing instructions to write in respondents' origin. For example, White respondents are allowed to write in a MENA background, such as Lebanese and Egyptian. With the detailed race data from 2020 enumeration available, we therefore have a direct source of data on the MENA population to see how well we can estimate the MENA population using survey data from the American Community Survey (ACS). 
+
+
+# Making an appropriate comparison
+
+Using data from the [Demographic and Housing Characteristics-A](https://www.census.gov/data/tables/2023/dec/2020-census-detailed-dhc-a.html) (DHC-A) data file, I compare the 2020 enumeration results with my data tabulated using the 2021 [American Community Survey](https://www.census.gov/programs-surveys/acs/microdata.html) (ACS) from [IPUMS](https://usa.ipums.org/usa/about.shtml). The DHC-A file provides detailed population data broken down by detailed age, sex, and age. The detailed breakdowns include MENA both "alone" and "alone or in any combination." Since these two data points cover slightly different populations, there a few caveats to note before I compare the survey estimates with the enumeration.
+
+The key distinction between the two measures is that they serve as upper and lower bounds for the MENA population. "MENA alone" measures the fewest number of people who identified as MENA in the enumeration and covers those who responded "White only" and wrote in a MENA background. Since respondents could select more than one race, a more comprehensive count is "MENA alone or in combination," which adds individuals who reported a MENA background in addition to another race.
+
+For my analyses, I used both birthplace and country of birth to classify the MENA population in the ACS to broadly capture the MENA diaspora. This means that my measure of the MENA population covers *anyone* in the ACS who reported a MENA background. Accordingly, this concept aligns more closely with the "MENA alone or in any combination" definition. I therefore opt to compare my survey-based estimates with "MENA alone or in any combination" to match each definition as closely as possible. To compare the 2020 enumeration with the ACS estimates, I overlay the age and sex distributions from each dataset in the two following plots.
+
+
+```{r data-prep, include=FALSE}
+
+# Check if we can get age -> good, table T02003 is available
+lapply(c("1182", "1071"), check_ddhca_groups, geography = "us")
+
+
+# ::::::::::::::::::::::::::::::::::
+# Prepare the 2020 DHC-A labels ----
+df_labels <- load_variables(year = 2020, dataset = "ddhca") %>% 
+  
+  # Keep table of interest
+  filter(grepl("23 AGE CATEGORIES", concept)) %>% 
+  
+  # Separate into sex and age
+  separate(col = label,
+           into = c("level", "sex", "age"),
+           sep = ":") %>% 
+  
+  # Remove `!`
+  modify_at(1:ncol(.), ~gsub("!", "", .x)) %>% 
+  
+  # Recodes for age and sex
+  mutate(agegrp = gsub("Under 5", "0", age),
+         agegrp = as.integer(substr(agegrp, 1, 2)),
+         agegrp = case_when(agegrp %in% 15:19 ~ 15,
+                            agegrp %in% 20:24 ~ 20,
+                            agegrp %in% 60:64 ~ 60,
+                            agegrp %in% 65:69 ~ 65,
+                            is.na(agegrp)     ~ 99,
+                            TRUE              ~ agegrp),
+         sex = case_when(sex == "Male"   ~ 1,
+                         sex == "Female" ~ 2,
+                         TRUE            ~ 0)
+         ) %>% 
+  
+  # Keep col
+  select(name, sex, agegrp)
+
+
+# ::::::::::::::::::::::::::::::::
+# Prepare the 2020 DHC-A data ----
+df_census <- map_dfr(c("1182"),   # Remove MENA alone, OLD: c("1071", "1182")
+                     ~get_decennial(year      = 2020,
+                                    geography = "us",
+                                    sumfile   = "ddhca",
+                                    pop_group = .x,
+                                    variables = sprintf("T02003_%03.0fN", 1:49))
+                     ) %>% 
+  
+  # Add in the labels
+  left_join(df_labels, by = c("variable" = "name")) %>% 
+  
+  # Collapse into standard age buckets
+  group_by(pop_group, sex, agegrp) %>% 
+  reframe(pop = sum(value))
+  
+
+
+
+```
+
+
+```{r survey-prep, include=FALSE}
+
+# Load MENA classifiers/params
+source("../code/901-params.R")
+
+```
+
+```{r plot-data-prep, include=FALSE}
+
+
+# Plotting data
+df_plotting <- df_census %>% 
+  
+  # Keep totals
+  filter(sex > 0 & agegrp < 99) %>% 
+  
+  mutate(dataset = str_replace_all(pop_group, c("1071" = "2020 MENA alone",
+                                                "1182" = "2020 MENA alone or in combo"))) %>% 
+  
+  # Add the ACS data
+  bind_rows(df_svy) %>% 
+  
+  # variable cleaning
+  mutate(pop_plot = ifelse(sex == 1, pop * -1, pop),
+         agegrp   = ifelse(dataset == "Forrester (2023)", (agegrp - 1)*5, agegrp),
+         agegrp   = as_factor(agegrp),
+         sex      = factor(sex,labels = c("Male", "Female")))
+
+
+```
+
+# Results
+
+Figure 1 overlays the age distribution between my ACS-based data and the 2020 enumeration results, capturing the share each age group makes up of the total MENA population. While the age distributions are visually similar, the survey-based estimates from the 2021 ACS showed a slightly older MENA population when identified as MENA alone or in any combination. 
+
+
+```{r plot-distribution, echo=FALSE,fig.cap="MENA Age Distribution by Data Source",dpi=400}
+
+df_plotting %>% 
+  
+  # combine data by age group/data  
+  group_by(dataset, agegrp) %>% 
+  reframe(pop = sum(abs(pop))) %>% 
+  
+  # Compute distribution
+  group_by(dataset) %>% 
+  mutate(pct_pop = pop/sum(pop)) %>% 
+  
+  # Overlay distributions
+  ggplot(data = ., aes(x = agegrp, y = pct_pop, fill = dataset)) +
+  
+  # bar chart
+  geom_col(alpha = 0.7, position = "dodge") +
+  
+  # Assign colors
+  scale_fill_manual(name   = element_blank(),
+                    values = c("darkblue", "darkred")) +
+  
+  scale_y_continuous(name   = "MENA Population (% of total)",
+                     labels = scales::percent,
+                     expand = c(0,0)) +
+  
+  xlab("Age Lower Limit") +
+  
+  theme_classic() +
+  
+  theme(legend.position = "top")
+
+
+
+```
+
+
+Figure 2 breaks down the age distribution down further by sex. Notably, the ACS-based estimates show that both men and women in the MENA population tend to be older than those counted in the 2020 enumeration. This is especially true for young men in their 30's, who represent a larger share of the MENA population compared to the 2020 enumeration.
+
+```{r pop-pyramid, echo=FALSE,fig.cap="MENA Population Pyramids by Data Source",dpi=400}
+
+# Get ranges
+pop_range  <- range(df_plotting$pop_plot/1000)
+pop_breaks <- pretty(pop_range, n = 5)
+
+# Make the plot
+ggplot(data = subset(df_plotting, grepl("Forrester|combo", dataset)), aes(x = pop_plot/1000, y = agegrp, fill = sex)) +
+  
+  # Column plot
+  geom_col(alpha = 0.7) +
+  
+  # Axis formatting
+  scale_x_continuous(breaks  = pop_breaks,
+                     labels = scales::comma(abs(pop_breaks))) +
+  
+  # Assign colors
+  scale_fill_manual(values = c("darkblue", "darkred")) +
+  
+  # Remove axis lines
+  theme_minimal() +
+  
+  # Legend up top
+  theme(legend.position = "top") +
+  
+  # Axis labels
+  labs(y = "Age Lower Limit",
+       x = "Population (000s)",
+       fill = element_blank()) +
+  
+  # Plot by source
+  facet_wrap(~ dataset)
+
+
+```
+
+```{r kstest, include=FALSE}
+
+# Sum across sexes
+df_test <- df_plotting %>% 
+  group_by(dataset, agegrp) %>% 
+  reframe(pop = sum(abs(pop))) %>% 
+  pivot_wider(names_from = dataset, values_from = pop)
+
+# K-S test
+ks_pval <- ks.test(df_test$`Forrester (2023)`, df_test$`2020 MENA alone or in combo`)
+
+
+```
+
+One remaining question is whether two age distributions are statistically different. Running a rudimentary [Kolmogorov-Smirnov](https://en.wikipedia.org/wiki/Kolmogorov–Smirnov_test) test, I find that there is no statistically significant difference between the MENA age distribution from the ACS compared to the 2020 enumeration (*p* = `r round(ks_pval$p.value, digits = 2)`). Despite the 2020 showing a slightly younger MENA population, the difference isn't significant when spread across age and sex.
+
+## What might explain the difference?
+
+While the differences are insignificant, two technical details from each data source might explain the older population in the ACS compared to the enumeration. 
+
+A first explanation might be the ACS survey weights. The ACS data relies on a set of [population controls](https://www.census.gov/programs-surveys/acs/technical-documentation/user-notes/2022-10.html) that only incorporate total population from the 2020 enumeration. Currently, the population controls rely on a projection of the 2021 population extrapolated from a ["blended base"](https://www2.census.gov/programs-surveys/popest/technical-documentation/methodology/2020-2021/2021-est-relnotes.pdf) population instead of the 2020 enumeration. The blended base incorporates information and projections based on the age and sex distribution from the 2010 enumeration to address processing issues from the 2020 enumeration.^[Specifically, the population estimates rely on the 2020 Demographic Analysis (DA) age and sex distributions. DA is one method the U.S. Census Bureau uses to estimate how well the 2020 enumeration covered the U.S. population. The method is a projection from the 2010 enumeration, accounting for births, deaths, and net migration from 2010 to 2020.] Accordingly, the age distribution extrapolated from the 2010 enumeration might not line up exactly with the 2020 population.
+
+A second explanation may relate to the difference between how race and ancestry information are collected. While the ACS has a [similar format](https://www2.census.gov/programs-surveys/acs/methodology/questionnaires/2021/quest21.pdf) for its race question (allowing a write-in for origin), the detailed responses are [not published](https://usa.ipums.org/usa-action/variables/RACE#codes_section) in the microdata. Instead, only information on respondents' ancestry and country of birth are available to determine MENA origins. Since the MENA population from the 2020 enumeration relies on information collected through the race question, the different mode of data collection may explain the difference.
+
+# Discussion
+
+Despite the slight differences in the age distribution, it's comforting to see that the survey-based estimates are very close to the 2020 enumeration results. Since retiring the "long-form" census, the ACS is the most comprehensive source of demographic and social information available. It's therefore crucial to have robust methods to estimate the characteristics of the MENA population, not just their levels, to inform researchers and policymakers. The data are especially important as the Office of Management and Budget (OMB) moves towards [separating out MENA](https://spd15revision.gov) in the official statistical standards for collecting race and ethnicity data.
+
+For those interested in more information and data, be sure to check out the recent Cato [briefing paper](https://www.cato.org/briefing-paper/middle-eastern-or-north-african-us-government-surveys-preview-mena-demographics), [other](https://www.cato.org/blog/there-were-38-million-middle-eastern-or-north-africans-united-states-2021) [Cato](https://www.cato.org/blog/new-government-proposals-classify-us-all-race-ethnicity) [analysis](https://www.cato.org/blog/government-proposes-make-bad-standards-race-ethnicity-worse) of MENA and the proposed changes to race and ethnicity data collection, and the U.S. Census Bureau's [analysis](https://www.census.gov/library/stories/2023/09/2020-census-dhc-a-mena-population.html). All [codes](https://github.com/acforrester/CensusMENA) for this analysis are available on GitHub.
+
+
